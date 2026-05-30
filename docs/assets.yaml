@@ -1,0 +1,36 @@
+version: 1
+
+assets:
+  - name: patient
+    description: Raw patient records ingested from CSV
+    columns:
+      - name: id
+        description: Surrogate primary key
+        tests: [not_null, unique]
+      - name: email
+        description: Patient email, validated on ingestion
+        tests: [not_null, valid_email]
+      - name: birth_date
+        description: Date of birth (YYYY-MM-DD)
+        tests: [not_null]
+      - name: gender
+        description: Patient gender
+        tests:
+          - not_null
+          - accepted_values: [male, female, other]
+      # outras colunas só com descrição, sem tests
+
+  - name: fhir_patient
+    description: FHIR-compliant patient resource
+    columns:
+      - name: id
+        description: Deterministic MD5 hash
+        tests: [not_null, unique]
+      - name: full_name
+        description: Concatenated first and last name
+        tests: [not_null]
+      - name: birth_date
+        tests: [not_null]
+      - name: telecom
+        description: JSON with phone and email
+        tests: [not_null]

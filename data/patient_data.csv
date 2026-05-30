@@ -1,0 +1,26 @@
+first_name,last_name,birth_date,gender,address,city,state,zip_code,phone_number,email,emergency_contact_name,emergency_contact_phone,blood_type,insurance_provider,insurance_number,marital_status,preferred_language,nationality,allergies,last_visit_date
+Alice,Brown,1985-03-14,female,12 Beacon St,Boston,MA,02108,617-555-0101,alice.brown@example.com,Robert Brown,617-555-0199,O+,BlueCross,BC-84721,married,English,American,peanuts,2025-11-10
+John,Smith,1990-07-22,male,45 Oak Ave,Chicago,IL,60614,312-555-0142,john.smith@example.com,Emma Smith,312-555-0188,A-,Aetna,AE-55310,single,English,American,,2025-12-01
+Maria,García,1978-11-30,female,Calle Mayor 18,Madrid,,28013,+34-91-5550134,maria.garcia@example.es,Juan García,+34-91-5550177,B+,Sanitas,SN-20194,married,Spanish,Spanish,"shellfish, penicillin",2026-01-15
+Wei,Chen,1982-01-10,male,221 Maple Rd,Seattle,WA,98101,206-555-0167,,Lin Chen,206-555-0189,AB+,Kaiser,KA-77821,married,Mandarin,Chinese,,2025-10-20
+Liu,Wang,1975-05-20,male,88 Pine St,San Francisco,CA,94102,415-555-0118,not-an-email,Mei Wang,415-555-0121,O-,Blue Shield,BS-99102,divorced,Mandarin,Chinese,latex,2025-09-05
+Kenji,Tanaka,1988-09-05,male,2-1-1 Shibuya,Tokyo,,15000,+81-3-5550-1234,kenji.tanaka@example.jp,Yumi Tanaka,+81-3-5550-9999,A+,JPNHealth,JP-11203,single,Japanese,Japanese,,2026-02-12
+Fatima,Al-Hassan,1992-02-14,female,King Fahd Rd 500,Riyadh,,11564,+966-11-5550199,fatima.alhassan@example.sa,Omar Al-Hassan,+966-11-5550200,B-,SaudiMed,SM-44820,married,Arabic,Saudi,dust,2025-12-18
+Alice,Brown,1985-03-14,female,12 Beacon St,Boston,MA,02108,617-555-0101,alice.brown@example.com,Robert Brown,617-555-0199,O+,BlueCross,BC-84721,married,English,American,peanuts,2026-03-05
+David ,Müller,1970-12-25,male,Hauptstraße 7,Berlin,,10115,+49-30-5550133,david.mueller@example.de,Klara Müller,+49-30-5550144,O+,TK,TK-55091,married,German,German,,2025-08-14
+Sofia,Rossi,1987-04-18,female,Via Roma 45,Rome,,00184,+39-06-5550155,sofia.rossi@example.it,Luca Rossi,+39-06-5550166,A+,INPS,IT-66730,single,Italian,Italian,pollen,2025-11-22
+James,O'Brien,,male,54 Grafton St,Dublin,,D02,+353-1-5550188,james.obrien@example.ie,Mary O'Brien,+353-1-5550199,B+,VHI,VH-11200,married,English,Irish,,2025-07-30
+Priya,Patel,1995-06-11,female,"Flat 3, 220 MG Rd",Mumbai,,400001,+91-22-5550121,priya.patel@example.in,Raj Patel,+91-22-5550122,O+,Star Health,SH-77420,single,Hindi,Indian,"peanuts, shellfish, latex",2026-01-28
+Mohammed,Ahmed,1983-10-09,male,,Cairo,,11511,+20-2-5550198,m.ahmed@example.eg,Amira Ahmed,+20-2-5550177,A-,EgyMed,EG-33501,married,Arabic,Egyptian,,2025-09-17
+Anna,Kowalski,1991-08-27,female,Nowy Świat 12,Warsaw,,00-497,+48-22-5550134,anna.kowalski@example.pl,Piotr Kowalski,+48-22-5550145,AB-,NFZ,PL-44108,single,Polish,Polish,,2026-02-03
+Carlos,Fernandez,1979-03-03,male,Av. Libertador 200,Buenos Aires,,C1425,+54-11-5550167,carlos.fernandez@example.ar,Lucia Fernandez,+54-11-5550178,O+,OSDE,AR-20910,married,Spanish,Argentinian,,2025-10-04
+Yuki,Sato,1986-12-14,female,1-2-3 Ginza,Tokyo,,10400,+81-3-5550-4567,yuki.sato@example.jp,Hiro Sato,+81-3-5550-7890,B+,JPNHealth,JP-22940,divorced,Japanese,Japanese,,2026-03-10
+John,Smith,1990-07-22,male,45 Oak Ave,Chicago,IL,60614,312-555-0142,j.smith@example.com,Emma Smith,312-555-0188,A-,Aetna,AE-55310,married,English,American,,2026-02-20
+Emma,Johnson,2001-05-30,female,78 River Rd,Austin,TX,78701,512-555-0123,emma.johnson@example.com,Sarah Johnson,512-555-0134,O+,UnitedHealth,UH-87320,single,English,American,,2025-12-29
+Hassan,Ali,1974-09-12,male,"very long address that intentionally exceeds the two hundred and fifty five varchar limit imposed on the address column so that the candidate can explicitly decide whether to truncate the value reject the record or quarantine it for manual review when the source field does not fit into the target column definition of the database schema",Beirut,,11072,+961-1-5550111,hassan.ali@example.lb,Leila Ali,+961-1-5550122,A+,MedNet,LB-55330,married,Arabic,Lebanese,,2025-08-08
+Lina,Park,1996-11-08,female,123 Gangnam-gu,Seoul,,06135,+82-2-5550155,lina.park@example.kr,Minho Park,+82-2-5550166,O-,KHI,KR-66220,single,Korean,Korean,shellfish,2026-01-11
+Omar,Haddad,1981-07-04,male,Hamra 88,Beirut,,11080,+961-1-5550188,omar.haddad@example.lb,Nour Haddad,+961-1-5550199,B+,MedNet,LB-77102,married,Arabic,Lebanese,,2025-11-05
+Ingrid,Svensson,1989-02-19,female,Drottninggatan 15,Stockholm,,11151,+46-8-5550112,ingrid.svensson@example.se,Lars Svensson,+46-8-5550123,O+,FK,SE-33871,married,Swedish,Swedish,,2026-02-27
+Rafael,Gonçalves,1993-06-25,male,Rua Augusta 120,Lisbon,,1100-048,+351-21-5550133,rafael.goncalves@example.pt,Ana Gonçalves,+351-21-5550144,A+,SNS,PT-44901,single,Portuguese,Portuguese,,2025-10-30
+Pedro,Alves,unknown,male,Rua das Flores 55,Porto,,4050-267,+351-22-5550122,pedro.alves@example.pt,Joana Alves,+351-22-5550133,B-,SNS,PT-55620,single,Portuguese,Portuguese,,2025-09-22
+Leila,Nasser,1984-10-11,female,Rue de la Paix 10,Tunis,,1002,+216-71-5550188,leila.nasser@example.tn,Karim Nasser,+216-71-5550177,AB+,CNAM,TN-33410,married,Arabic,Tunisian,,2026-03-15
