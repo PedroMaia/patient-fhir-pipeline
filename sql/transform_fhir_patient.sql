@@ -23,12 +23,8 @@ INSERT OR REPLACE INTO fhir_patient (
     insurance_number,
     nationality
 )
-SELECT
-    MD5(
-        COALESCE(first_name, '') || '|' ||
-        COALESCE(last_name, '')  || '|' ||
-        COALESCE(CAST(birth_date AS VARCHAR), '')
-    )                                                   AS id,
+SELECT 
+    MD5(insurance_number || last_visit_date::VARCHAR)   AS id,
     CONCAT_WS(' ', first_name, last_name)               AS full_name,
     birth_date,
     gender,

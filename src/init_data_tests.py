@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 import yaml
 
-from config import PROJECT_ROOT, LOG_LEVEL
+from src.config import PROJECT_ROOT, LOG_LEVEL
 from db import get_connection
 
 logging.basicConfig(level=LOG_LEVEL, format="%(message)s")

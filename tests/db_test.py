@@ -1,6 +1,6 @@
 """Verifies the environment is correctly configured."""
 import duckdb
-from config import DB_PATH, CSV_PATH
+from src.config import DB_PATH, CSV_PATH
 
 print(f"DB_PATH:  {DB_PATH}")
 print(f"CSV_PATH: {CSV_PATH}")
