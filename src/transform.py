@@ -1,4 +1,4 @@
-"""Runs the FHIR transformation: patient -> fhir_patient."""
+"""Runs the FHIR transformation: patient -> fhir_patient + fhir_patient_history."""
 import logging
 
 from config import PROJECT_ROOT, LOG_LEVEL
@@ -7,27 +7,58 @@ from db import get_connection
 logging.basicConfig(level=LOG_LEVEL, format="%(levelname)s | %(message)s")
 log = logging.getLogger(__name__)
 
-TRANSFORM_SQL = PROJECT_ROOT / "sql" / "transform_fhir_patient.sql"
-TRANSFORM_SQL_HISTORY = PROJECT_ROOT / "sql" / "transform_fhir_patient_history.sql"
+TRANSFORM_FILES = {
+    "fhir_patient": {
+        "merge":           PROJECT_ROOT / "sql" / "transform_fhir_patient_merge.sql",
+        "truncate_insert":  PROJECT_ROOT / "sql" / "transform_fhir_patient.sql",
+    },
+    "fhir_patient_history": {
+        "merge":            PROJECT_ROOT / "sql" / "transform_fhir_patient_history_merge.sql",
+        "truncate_insert":  PROJECT_ROOT / "sql" / "transform_fhir_patient_history.sql",
+    },
+}
+
+
+def get_strategy(con, table_name: str) -> str:
+    row = con.execute(
+        "SELECT strategy FROM pipeline_control WHERE table_name = ?", [table_name]
+    ).fetchone()
+    if not row:
+        raise ValueError(f"No pipeline_control entry for table: {table_name}")
+    return row[0]
+
+
+def run_transform(con, table_name: str) -> None:
+    strategy = get_strategy(con, table_name)
+    log.info(f"{table_name} → strategy: {strategy}")
+
+    if strategy == "truncate_insert":
+        if table_name == "fhir_patient":
+            con.execute("DELETE FROM fhir_patient_history")
+            log.info("Truncated fhir_patient_history (FK dependency)")
+            con.execute("DELETE FROM fhir_patient")
+            log.info("Truncated fhir_patient")
+        elif table_name == "fhir_patient_history":
+            con.execute("DELETE FROM fhir_patient_history")
+            log.info("Truncated fhir_patient_history")
+
+    sql = TRANSFORM_FILES[table_name][strategy].read_text(encoding="utf-8")
+    con.execute(sql)
 
 
 def main() -> None:
-    log.info(f"Running transformation: {TRANSFORM_SQL.name}")
-
-    sql = TRANSFORM_SQL.read_text(encoding="utf-8")
-    sql_history = TRANSFORM_SQL_HISTORY.read_text(encoding="utf-8")
-
     with get_connection() as con:
-        # Optional: ensure fhir_patient exists (defensive)
-        ddl = (PROJECT_ROOT / "sql" / "02_create_fhir_patient.sql").read_text()
-        con.execute(ddl)
+        count_before         = con.execute("SELECT COUNT(*) FROM fhir_patient").fetchone()[0]
+        count_history_before = con.execute("SELECT COUNT(*) FROM fhir_patient_history").fetchone()[0]
 
-        con.execute(sql)
-        con.execute(sql_history)
+        run_transform(con, "fhir_patient")
+        run_transform(con, "fhir_patient_history")
 
-        count         = con.execute("SELECT COUNT(*) FROM fhir_patient").fetchone()[0]
-        count_history = con.execute("SELECT COUNT(*) FROM fhir_patient_history").fetchone()[0]
-        log.info(f"fhir_patient: {count} rows | fhir_patient_history: {count_history} rows")
+        count_after         = con.execute("SELECT COUNT(*) FROM fhir_patient").fetchone()[0]
+        count_history_after = con.execute("SELECT COUNT(*) FROM fhir_patient_history").fetchone()[0]
+
+        log.info(f"fhir_patient: {count_after} rows (+{count_after - count_before} added)")
+        log.info(f"fhir_patient_history: {count_history_after} rows (+{count_history_after - count_history_before} added)")
 
 if __name__ == "__main__":
     main()

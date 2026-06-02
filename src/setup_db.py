@@ -12,7 +12,8 @@ SQL_DIR = PROJECT_ROOT / "sql"
 
 DDL_FILES = [
     "01_create_patient.sql",
-    "02_create_fhir_patient.sql"
+    "02_create_fhir_patient.sql",
+    "03_create_pipeline_control.sql"
 ]
 
 def main() -> None:

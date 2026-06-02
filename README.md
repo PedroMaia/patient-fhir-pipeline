@@ -86,8 +86,11 @@ patient-fhir-pipeline/
 ├── sql/
 │   ├── 01_create_patient.sql
 │   ├── 02_create_fhir_patient.sql
+│   ├── 03_create_pipeline_control.sql
 │   ├── transform_fhir_patient.sql
-│   └── transform_fhir_patient_history.sql    # SCD2 transformation
+│   ├── transform_fhir_patient_merge.sql
+│   ├── transform_fhir_patient_history.sql
+│   └── transform_fhir_patient_history_merge.sql
 ├── src/
 │   ├── config.py                     # Env-driven configuration
 │   ├── db.py                         # DuckDB connection helper
@@ -102,6 +105,24 @@ patient-fhir-pipeline/
 ├── pyproject.toml                    # pytest configuration
 └── requirements.txt
 ```
+
+### Pipeline control
+
+Each target table has a configurable load strategy stored in the `pipeline_control` table:
+
+| Table                  | Strategy         | Behaviour                                      |
+|------------------------|------------------|------------------------------------------------|
+| `fhir_patient`         | `merge`          | Upsert — only updates rows that changed        |
+| `fhir_patient_history` | `merge`          | Inserts new versions, updates valid_to only    |
+
+Supported strategies:
+
+- **`merge`** — uses SQL `MERGE`. Only touches rows that actually changed (`IS DISTINCT FROM`). Safe for production — preserves FK integrity and is idempotent.
+- **`truncate_insert`** — deletes all rows and reinserts. Simpler but destructive. Note: due to a DuckDB FK constraint limitation, `truncate_insert` on `fhir_patient` requires wrapping both tables in the same delete sequence. Not recommended when FK relationships exist.
+
+To change strategy at runtime without redeploying:
+
+    UPDATE pipeline_control SET strategy = 'truncate_insert' WHERE table_name = 'fhir_patient';
 
 ## Design decisions
 
@@ -208,6 +229,6 @@ pytest -v
 
 ## Future improvements
 - Change the primarykey to insurance_number;(DONE)
-- Migrate fhir_patient_history to a MERGE-based upsert to avoid delete/insert on re-runs.
-- Add valid_from/valid_to indexing for faster point-in-time queries on fhir_patient_history.
-- Problem with equals names.(Document why and we can have history)- Replace DuckDB with Postgres in production; the transformation SQL is portable with minor syntax adjustments.
+- Migrate fhir_patient_history to a MERGE-based upsert to avoid delete/insert on re-runs.(DONE)
+- Replace DuckDB with Postgres in production; the transformation SQL is portable with minor syntax adjustments.
+- Add orchestration with Prefect to schedule and monitor pipeline runs, with task-level retries and observability via the Prefect UI. 
