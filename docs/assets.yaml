@@ -1,4 +1,4 @@
-version: 1
+version: 2
 
 assets:
   - name: patient
@@ -7,6 +7,12 @@ assets:
       - name: id
         description: Surrogate primary key
         tests: [not_null, unique]
+      - name: first_name
+        description: Patient first name
+        tests: [not_null]
+      - name: last_name
+        description: Patient last name
+        tests: [not_null]
       - name: email
         description: Patient email, validated on ingestion
         tests: [not_null, valid_email]
@@ -18,19 +24,100 @@ assets:
         tests:
           - not_null
           - accepted_values: [male, female, other]
-      # outras colunas só com descrição, sem tests
+      - name: address
+        description: Patient street address
+        tests: [not_null]
+      - name: city
+        description: Patient city
+      - name: state
+        description: Two-letter state code
+      - name: zip_code
+        description: Postal zip code
+      - name: phone_number
+        description: Patient phone number
+      - name: emergency_contact_name
+        description: Name of emergency contact
+      - name: emergency_contact_phone
+        description: Phone number of emergency contact
+      - name: blood_type
+        description: Patient blood type
+        tests:
+          - accepted_values: [A+, A-, B+, B-, AB+, AB-, O+, O-]
+      - name: insurance_provider
+        description: Name of insurance provider
+      - name: insurance_number
+        description: Insurance policy number
+        tests: [not_null, unique]
+      - name: marital_status
+        description: Patient marital status
+        tests:
+          - accepted_values: [single, married, divorced, widowed]
+      - name: preferred_language
+        description: Patient preferred language
+      - name: nationality
+        description: Patient nationality
+      - name: allergies
+        description: Known allergies, NULL if none
+      - name: last_visit_date
+        description: Date of last recorded visit
 
   - name: fhir_patient
-    description: FHIR-compliant patient resource
+    description: FHIR-compliant patient resource, one row per patient (most recent state)
     columns:
       - name: id
-        description: Deterministic MD5 hash
+        description: Deterministic MD5 hash of insurance_number
         tests: [not_null, unique]
       - name: full_name
         description: Concatenated first and last name
         tests: [not_null]
       - name: birth_date
+        description: Date of birth
+        tests: [not_null]
+      - name: gender
+        description: Patient gender
+        tests:
+          - not_null
+          - accepted_values: [male, female, other]
+      - name: address
+        description: Patient street address
         tests: [not_null]
       - name: telecom
-        description: JSON with phone and email
+        description: JSON object with phone and email fields
         tests: [not_null]
+      - name: marital_status
+        description: Patient marital status
+        tests:
+          - accepted_values: [single, married, divorced, widowed]
+      - name: insurance_number
+        description: Insurance policy number, unique per patient
+        tests: [not_null, unique]
+      - name: nationality
+        description: Patient nationality, truncated to 20 chars
+
+  - name: fhir_patient_history
+    description: SCD2 history of patient demographic changes, one row per patient per visit
+    columns:
+      - name: id
+        description: Deterministic MD5 hash of insurance_number + valid_from
+        tests: [not_null, unique]
+      - name: patient_id
+        description: FK to fhir_patient.id
+        tests: [not_null]
+      - name: full_name
+        description: Patient full name at time of visit
+        tests: [not_null]
+      - name: address
+        description: Patient address at time of visit
+      - name: telecom
+        description: JSON object with phone and email at time of visit
+      - name: marital_status
+        description: Marital status at time of visit
+        tests:
+          - accepted_values: [single, married, divorced, widowed]
+      - name: nationality
+        description: Nationality at time of visit, truncated to 20 chars
+      - name: valid_from
+        description: Visit date when this version became active
+        tests: [not_null]
+      - name: valid_to
+        description: Visit date when superseded, NULL if current record

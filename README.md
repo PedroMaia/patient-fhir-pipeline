@@ -1,13 +1,13 @@
 # Patient FHIR Pipeline
 
-End-to-end data pipeline that ingests patient records from a CSV file and transforms them into a FHIR-compliant `patient` resource table.
+End-to-end data pipeline that ingests patient records from a CSV file and transforms them into a FHIR-compliant `patient` resource tech challenge for the company promptly health.
 Built with Python and SQL, using DuckDB as the local database.
 
 ## Overview
 
 ```
-patient_data.csv  ──▶  patient (raw)  ──▶  fhir_patient         (estado atual)
-                       ingestion +         fhir_patient_history  (SCD2 histórico)
+patient_data.csv  ──▶  patient (raw)  ──▶  fhir_patient         (marts)
+                       ingestion +         fhir_patient_history  (marts)
                        validation          SQL transformation
 ```
 
@@ -19,7 +19,10 @@ Three stages:
 
 A YAML-driven data quality runner (`data_tests.py`) validates the loaded data against a declarative spec (`docs/assets.yaml`).
 
-
+The pipeline follows a two-layer architecture: raw and mart.
+The raw layer (patient) holds data as ingested from the CSV, with only structural validation applied (email format, required fields).
+The mart layer (fhir_patient, fhir_patient_history) contains the final FHIR-compliant representation, ready for downstream consumption.
+An **intermediate layer was omitted as the transformation logic is simple enough to go directly** from raw to mart in a single SQL step.
 ## Prerequisites
 
 - Python 3.9 or higher
@@ -30,7 +33,7 @@ A YAML-driven data quality runner (`data_tests.py`) validates the loaded data ag
 
 ```bash
 # 1. Clone the repository
-git clone <repo-url>
+git clone https://github.com/PedroMaia/patient-fhir-pipeline
 cd patient-fhir-pipeline
 
 # 2. Create and activate a virtual environment
@@ -73,6 +76,7 @@ python src/data_tests.py
 
 The data tests exit with code `1` if any check fails, making them suitable for CI integration.
 
+> **Note:** : I'm working in this tests part!
 ## Project structure
 
 ```
@@ -101,9 +105,9 @@ patient-fhir-pipeline/
 │   ├── transform.py                  # Runs SQL transformation
 │   ├── data_tests.py                 # YAML-driven data quality runner
 │   └── run_pipeline.py               # Orchestrates all stages
-├── tests/                            # pytest tests for structural validation
+├── tests/                            # pytest tests for structural validation (WIP)
 ├── .env.example                      # Template for environment variables
-├── pyproject.toml                    # pytest configuration
+├── pyproject.toml                    # pytest configuration(WIP)
 └── requirements.txt
 ```
 
@@ -113,13 +117,13 @@ Each target table has a configurable load strategy stored in the `pipeline_contr
 
 | Table                  | Strategy         | Behaviour                                      |
 |------------------------|------------------|------------------------------------------------|
-| `fhir_patient`         | `merge`          | Upsert — only updates rows that changed        |
-| `fhir_patient_history` | `merge`          | Inserts new versions, updates valid_to only    |
+| `fhir_patient`         | `merge`  | Upsert — only updates rows that changed        |
+| `fhir_patient_history` | `merge`  | Inserts new versions, updates valid_to only    |
 
 Supported strategies:
 
 - **`merge`** — uses SQL `MERGE`. Only touches rows that actually changed (`IS DISTINCT FROM`). Safe for production — preserves FK integrity and is idempotent.
-- **`truncate_insert`** — deletes all rows and reinserts. Simpler but destructive. Note: due to a DuckDB FK constraint limitation, `truncate_insert` on `fhir_patient` requires wrapping both tables in the same delete sequence. Not recommended when FK relationships exist.
+- **`truncate_insert`** — deletes all rows and reinserts. Simpler but destructive. Note: due to a DuckDB FK constraint limitation, `truncate_insert` on `fhir_patient` requires wrapping both tables in the same delete sequence.
 
 To change strategy at runtime without redeploying:
 
@@ -171,10 +175,6 @@ To get the state of a patient at a specific date:
     WHERE patient_id = MD5('AR-20910')
       AND '2023-06-15' BETWEEN valid_from AND COALESCE(valid_to, CURRENT_DATE);
 
-### Idempotent ingestion
-
-DuckDB does not yet support `ALTER SEQUENCE ... RESTART`. Idempotency is achieved by dropping and recreating the `patient` table at the start of each ingestion run. In a Postgres deployment this would be replaced by `TRUNCATE patient RESTART IDENTITY`.
-
 ### Validation and rejection
 
 Rows are validated before insertion. A row is rejected (with logged reason) if:
@@ -185,11 +185,53 @@ Rows are validated before insertion. A row is rejected (with logged reason) if:
 
 Empty strings in `allergies` are normalized to `NULL`. Invalid `last_visit_date` values are silently converted to `NULL` (the field is non-critical and patients may have no recorded visits).
 
-### Nationality truncation
+## Database inspection
 
-The source schema has `nationality VARCHAR(100)` and the FHIR target has `VARCHAR(20)`. The transformation explicitly truncates with `SUBSTRING(nationality, 1, 20)`. In a real FHIR system this field would map to an ISO 3166 country code (e.g., `"American"` → `"US"`); that mapping is out of scope here.
+Open an interactive session:
+```bash
+duckdb db/patient.duckdb
+```
 
-## Data quality tests
+Or run a single query directly:
+```bash
+duckdb db/patient.duckdb "<query>"
+```
+
+### Useful commands
+
+```bash
+# Show all tables
+duckdb db/patient.duckdb "SHOW TABLES;"
+
+# Count rows per table
+duckdb db/patient.duckdb "SELECT COUNT(*) AS total FROM patient;"
+duckdb db/patient.duckdb "SELECT COUNT(*) AS total FROM fhir_patient;"
+duckdb db/patient.duckdb "SELECT COUNT(*) AS total FROM fhir_patient_history;"
+
+# Preview data
+duckdb db/patient.duckdb "SELECT * FROM patient LIMIT 5;"
+duckdb db/patient.duckdb "SELECT * FROM fhir_patient LIMIT 5;"
+duckdb db/patient.duckdb "SELECT * FROM fhir_patient_history LIMIT 5;"
+
+# Check pipeline_control strategies
+duckdb db/patient.duckdb "SELECT * FROM pipeline_control;"
+
+# Check for duplicate insurance_number in fhir_patient
+duckdb db/patient.duckdb "SELECT insurance_number, COUNT(*) FROM fhir_patient GROUP BY insurance_number HAVING COUNT(*) > 1;"
+
+# Full history of a specific patient
+duckdb db/patient.duckdb "SELECT * FROM fhir_patient_history WHERE patient_id = MD5('AR-20910') ORDER BY valid_from;"
+
+# Current state of a specific patient
+duckdb db/patient.duckdb "SELECT * FROM fhir_patient WHERE insurance_number = 'AR-20910';"
+
+# Current records in history (valid_to IS NULL)
+duckdb db/patient.duckdb "SELECT * FROM fhir_patient_history WHERE valid_to IS NULL ORDER BY valid_from;"
+```
+
+> **Note:** DuckDB allows only one writer at a time. Close any open CLI or DBeaver sessions before running the pipeline.
+
+## Data quality tests(WIP)
 
 `docs/assets.yaml` documents both tables column-by-column and declares quality tests in a dbt-inspired format:
 
@@ -219,17 +261,10 @@ python src/data_tests.py
 # Structural tests (pytest)
 pytest -v
 ```
-
-## Troubleshooting
-
-**`ModuleNotFoundError` when running scripts** — Make sure the virtual environment is active (`source .venv/bin/activate`) and that you're running scripts as shown above.
-
-**DuckDB lock errors** — DuckDB allows only one writer at a time. Close any open connections (notebooks, DBeaver, CLI sessions) before running the pipeline.
-
-**Validation rejects rows unexpectedly** — Check the logs for the rejection reason. The validators in `src/validation.py` can be tightened or relaxed as needed.
+> **Note:** I'm working in tests part
 
 ## Future improvements
-- Change the primarykey to insurance_number;(DONE)
-- Migrate fhir_patient_history to a MERGE-based upsert to avoid delete/insert on re-runs.(DONE)
+- Fix the tests running.
+- Add orchestration with Prefect to schedule and monitor pipeline runs, with task-level retries and observability via the Prefect UI.
 - Replace DuckDB with Postgres in production; the transformation SQL is portable with minor syntax adjustments.
-- Add orchestration with Prefect to schedule and monitor pipeline runs, with task-level retries and observability via the Prefect UI. 
+- Implement dbt.
