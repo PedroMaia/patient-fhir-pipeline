@@ -1,18 +1,20 @@
 -- =============================================================================
--- Transform: patient -> fhir_patient
+-- Transform: patient -> fhir_patient + fhir_patient_history
 -- =============================================================================
 -- Decisions:
---   - id: deterministic MD5 hash of (first_name, last_name, birth_date).
---         Reproducible across runs, idempotent with INSERT OR REPLACE.
---   - full_name: CONCAT_WS handles NULL gracefully (skips them).
---   - telecom: JSON object built from phone_number and email.
---   - nationality: source is VARCHAR(100), target is VARCHAR(20).
---         We truncate to 20 chars. In a real FHIR system this would
---         map to an ISO 3166 country code (e.g., "American" -> "US").
---         Out of scope here, documented in README.
+--   - fhir_patient: always holds the most recent state per patient.
+--   - fhir_patient_history: SCD2 — one row per change, valid_from/valid_to.
+--   - id: MD5(insurance_number) — stable across visits.
+--   - history.id: MD5(insurance_number || last_visit_date) — unique per version.
+--   - valid_to NULL means current record.
+--   - telecom: JSON object with phone and email.
+--   - nationality: truncated to 20 chars (see README for ISO 3166 note).
 -- =============================================================================
 
-INSERT OR REPLACE INTO fhir_patient (
+-- -----------------------------------------------------------------------------
+-- 1. fhir_patient (estado mais recente)
+-- -----------------------------------------------------------------------------
+INSERT INTO fhir_patient (
     id,
     full_name,
     birth_date,
@@ -23,8 +25,8 @@ INSERT OR REPLACE INTO fhir_patient (
     insurance_number,
     nationality
 )
-SELECT 
-    MD5(insurance_number || last_visit_date::VARCHAR)   AS id,
+SELECT DISTINCT ON (insurance_number)
+    MD5(insurance_number)                               AS id,
     CONCAT_WS(' ', first_name, last_name)               AS full_name,
     birth_date,
     gender,
@@ -36,4 +38,13 @@ SELECT
     marital_status,
     insurance_number,
     SUBSTRING(nationality, 1, 20)                       AS nationality
-FROM patient;
+FROM patient
+ORDER BY insurance_number, last_visit_date DESC
+ON CONFLICT (id) DO UPDATE SET
+    full_name        = EXCLUDED.full_name,
+    birth_date       = EXCLUDED.birth_date,
+    gender           = EXCLUDED.gender,
+    address          = EXCLUDED.address,
+    telecom          = EXCLUDED.telecom,
+    marital_status   = EXCLUDED.marital_status,
+    nationality      = EXCLUDED.nationality;

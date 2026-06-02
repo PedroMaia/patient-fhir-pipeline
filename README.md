@@ -6,18 +6,19 @@ Built with Python and SQL, using DuckDB as the local database.
 ## Overview
 
 ```
-patient_data.csv  ──▶  patient (raw)  ──▶  fhir_patient (FHIR-compliant)
-                       ingestion +         SQL transformation
-                       validation
+patient_data.csv  ──▶  patient (raw)  ──▶  fhir_patient         (estado atual)
+                       ingestion +         fhir_patient_history  (SCD2 histórico)
+                       validation          SQL transformation
 ```
 
 Three stages:
 
 1. **Schema setup** — creates `patient` and `fhir_patient` tables from DDL files.
 2. **Ingestion** — reads the CSV, validates each row (email format, required dates, missing address), and loads valid rows into `patient`.
-3. **Transformation** — derives `fhir_patient` from `patient` using a single `INSERT OR REPLACE INTO ... SELECT` statement with a deterministic MD5-based primary key.
+3. **Transformation** — derives `fhir_patient` (current state) and `fhir_patient_history` (full SCD2 history) from patient.
 
 A YAML-driven data quality runner (`data_tests.py`) validates the loaded data against a declarative spec (`docs/assets.yaml`).
+
 
 ## Prerequisites
 
@@ -83,9 +84,10 @@ patient-fhir-pipeline/
 ├── docs/
 │   └── assets.yaml                   # Data asset documentation + test specs
 ├── sql/
-│   ├── 01_create_patient.sql         # DDL: patient table
-│   ├── 02_create_fhir_patient.sql    # DDL: fhir_patient table
-│   └── transform_fhir_patient.sql    # Transformation logic
+│   ├── 01_create_patient.sql
+│   ├── 02_create_fhir_patient.sql
+│   ├── transform_fhir_patient.sql
+│   └── transform_fhir_patient_history.sql    # SCD2 transformation
 ├── src/
 │   ├── config.py                     # Env-driven configuration
 │   ├── db.py                         # DuckDB connection helper
@@ -117,12 +119,35 @@ DDL adaptations from the original DDL specification:
 | `TIMESTAMP WITH TIME ZONE` | `TIMESTAMPTZ` | Direct equivalent |
 
 ### Deterministic FHIR `id`
-TODO !! Change the id to 
-The `fhir_patient.id` is generated as `insurance_number || '|' || CAST(last_visit_date AS VARCHAR)`. This makes the transformation:
+The fhir_patient.id is generated as MD5(insurance_number) — stable across visits.
+The fhir_patient_history.id is generated as MD5(insurance_number || last_visit_date) — unique per version.
 
 - **Deterministic** — same input always produces the same `id`
 - **Idempotent** — combined with `INSERT OR REPLACE`, running the transformation multiple times yields the same result
 - **Reproducible** — useful for downstream systems that reference patients by `id`
+
+### Patient history — SCD2
+
+fhir_patient always holds the most recent demographic state per patient (1 row per patient).
+fhir_patient_history tracks every change over time using a Slowly Changing Dimension Type 2 pattern:
+
+- valid_from: the visit date when this version became active
+- valid_to: the visit date when it was superseded (NULL = current record)
+- Fields tracked: address, telecom, marital_status, nationality
+
+Fields excluded from history (immutable): full_name, birth_date, gender, insurance_number.
+
+To query the full history of a patient:
+
+    SELECT * FROM fhir_patient_history
+    WHERE patient_id = MD5('AR-20910')
+    ORDER BY valid_from;
+
+To get the state of a patient at a specific date:
+
+    SELECT * FROM fhir_patient_history
+    WHERE patient_id = MD5('AR-20910')
+      AND '2023-06-15' BETWEEN valid_from AND COALESCE(valid_to, CURRENT_DATE);
 
 ### Idempotent ingestion
 
@@ -183,9 +208,6 @@ pytest -v
 
 ## Future improvements
 - Change the primarykey to insurance_number;(DONE)
-- Problem with equals names.(Document why and we can have history)
-- Replace DuckDB with Postgres in production; the transformation SQL is portable with minor syntax adjustments.
-- Migrate the transformation to dbt (`models/marts/fhir_patient.sql`) for built-in lineage, docs, and tests.
-- Add orchestration with Airflow or Prefect for scheduling and retries.
-- Map `nationality` strings to ISO 3166 country codes via a reference table.
-- Add structured logging and run metrics (rows ingested, rejected, transformed) to a monitoring table.
+- Migrate fhir_patient_history to a MERGE-based upsert to avoid delete/insert on re-runs.
+- Add valid_from/valid_to indexing for faster point-in-time queries on fhir_patient_history.
+- Problem with equals names.(Document why and we can have history)- Replace DuckDB with Postgres in production; the transformation SQL is portable with minor syntax adjustments.
