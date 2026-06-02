@@ -2,7 +2,7 @@
 import logging
 from pathlib import Path
 
-from config import PROJECT_ROOT, LOG_LEVEL
+from config import PROJECT_ROOT, LOG_LEVEL, DB_PATH
 from db import run_sql_file
 
 logging.basicConfig(level=LOG_LEVEL, format="%(levelname)s | %(message)s")
@@ -13,10 +13,13 @@ SQL_DIR = PROJECT_ROOT / "sql"
 DDL_FILES = [
     "01_create_patient.sql",
     "02_create_fhir_patient.sql",
-    "03_create_pipeline_control.sql"
+    "03_create_fhir_patient_history.sql",
+    "04_create_pipeline_control.sql"
 ]
 
 def main() -> None:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
     for filename in DDL_FILES:
         path = SQL_DIR / filename
         log.info(f"Running {filename}")

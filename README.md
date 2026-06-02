@@ -86,7 +86,8 @@ patient-fhir-pipeline/
 ├── sql/
 │   ├── 01_create_patient.sql
 │   ├── 02_create_fhir_patient.sql
-│   ├── 03_create_pipeline_control.sql
+│   ├── 03_create_fhir_patient_history.sql
+│   ├── 04_create_pipeline_control.sql
 │   ├── transform_fhir_patient.sql
 │   ├── transform_fhir_patient_merge.sql
 │   ├── transform_fhir_patient_history.sql
