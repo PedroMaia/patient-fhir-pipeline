@@ -17,7 +17,7 @@ Three stages:
 2. **Ingestion** — reads the CSV, validates each row (email format, required dates, missing address), and loads valid rows into `patient`.
 3. **Transformation** — derives `fhir_patient` (current state) and `fhir_patient_history` (full SCD2 history) from patient.
 
-A YAML-driven data quality runner (`data_tests.py`) validates the loaded data against a declarative spec (`docs/assets.yaml`).
+A YAML-driven data quality runner (`init_data_tests.py`) validates the loaded data against a declarative spec (`docs/assets.yaml`), and is fully integrated into the pytest suite.
 
 The pipeline follows a two-layer architecture: raw and mart.
 The raw layer (patient) holds data as ingested from the CSV, with only structural validation applied (email format, required fields).
@@ -68,15 +68,11 @@ python src/ingest.py       # load CSV into patient
 python src/transform.py    # transform patient -> fhir_patient
 ```
 
-To run data quality tests defined in `docs/assets.yaml`:
+To run all tests (schema, connectivity, and data quality):
 
 ```bash
-python src/data_tests.py
+python -m pytest -v
 ```
-
-The data tests exit with code `1` if any check fails, making them suitable for CI integration.
-
-> **Note:** : I'm working in this tests part!
 ## Project structure
 
 ```
@@ -103,11 +99,14 @@ patient-fhir-pipeline/
 │   ├── setup_db.py                   # Applies DDL files
 │   ├── ingest.py                     # CSV ingestion
 │   ├── transform.py                  # Runs SQL transformation
-│   ├── data_tests.py                 # YAML-driven data quality runner
+│   ├── init_data_tests.py            # YAML-driven data quality runner
 │   └── run_pipeline.py               # Orchestrates all stages
-├── tests/                            # pytest tests for structural validation (WIP)
+├── tests/
+│   ├── test_db.py                    # Environment and DuckDB connectivity tests
+│   ├── check_schema_test.py          # Table and column schema tests
+│   └── test_data_quality.py          # YAML-driven data quality tests (assets.yaml)
 ├── .env.example                      # Template for environment variables
-├── pyproject.toml                    # pytest configuration(WIP)
+├── pyproject.toml                    # pytest configuration
 └── requirements.txt
 ```
 
@@ -231,9 +230,27 @@ duckdb db/patient.duckdb "SELECT * FROM fhir_patient_history WHERE valid_to IS N
 
 > **Note:** DuckDB allows only one writer at a time. Close any open CLI or DBeaver sessions before running the pipeline.
 
-## Data quality tests(WIP)
+## Tests
 
-`docs/assets.yaml` documents both tables column-by-column and declares quality tests in a dbt-inspired format:
+The test suite is split into three files, all run with a single command:
+
+```bash
+python -m pytest -v
+```
+
+### Test files
+
+| File | What it tests |
+|------|---------------|
+| `tests/test_db.py` | Environment configuration (`DB_PATH`, `CSV_PATH`) and DuckDB connectivity |
+| `tests/check_schema_test.py` | All expected tables exist and each table has the correct columns |
+| `tests/test_data_quality.py` | Data quality assertions from `docs/assets.yaml` — one test node per assertion |
+
+The schema and data quality tests require the pipeline to have been initialised first. If the database does not exist, those tests are automatically skipped with a clear message.
+
+### Data quality tests
+
+`docs/assets.yaml` declares quality assertions per column in a dbt-inspired format:
 
 ```yaml
 - name: email
@@ -241,30 +258,33 @@ duckdb db/patient.duckdb "SELECT * FROM fhir_patient_history WHERE valid_to IS N
   tests: [not_null, valid_email]
 ```
 
+`tests/test_data_quality.py` reads this file at collection time and generates one pytest node per `(table, column, test)` triple, so the output clearly identifies exactly which assertion failed:
+
+```
+tests/test_data_quality.py::test_data_quality[patient.email.not_null] PASSED
+tests/test_data_quality.py::test_data_quality[patient.email.valid_email] PASSED
+tests/test_data_quality.py::test_data_quality[fhir_patient.id.unique] PASSED
+...
+```
+
 Supported test types:
 
 | Test | Validates |
-|---|---|
+|------|-----------|
 | `not_null` | Column has no NULL values |
 | `unique` | Column has no duplicate non-null values |
-| `accepted_values` | All values are in a specified set |
-| `valid_email` | All values match an email regex |
+| `accepted_values` | All non-null values belong to a specified set |
+| `valid_email` | All non-null values match a standard email pattern |
 
-`src/data_tests.py` loads the YAML, generates SQL queries per test, runs them against DuckDB, and reports pass/fail with violation counts.
-
-## Running tests
+To run only the data quality tests:
 
 ```bash
-# Data quality tests (YAML-driven)
-python src/data_tests.py
-
-# Structural tests (pytest)
-pytest -v
+python -m pytest -v tests/test_data_quality.py
 ```
-> **Note:** I'm working in tests part
+
+The suite exits with code `1` if any assertion fails, making it suitable for CI integration.
 
 ## Future improvements
-- Fix the tests running.
 - Add orchestration with Prefect to schedule and monitor pipeline runs, with task-level retries and observability via the Prefect UI.
 - Replace DuckDB with Postgres in production; the transformation SQL is portable with minor syntax adjustments.
 - Implement dbt.

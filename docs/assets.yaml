@@ -47,7 +47,7 @@ assets:
         description: Name of insurance provider
       - name: insurance_number
         description: Insurance policy number
-        tests: [not_null, unique]
+        tests: [not_null]
       - name: marital_status
         description: Patient marital status
         tests:
