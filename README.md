@@ -1,7 +1,7 @@
 # Patient FHIR Pipeline
 
 End-to-end data pipeline that ingests patient records from a CSV file and transforms them into a FHIR-compliant `patient` resource tech challenge for the company promptly health.
-Built with Python and SQL, using DuckDB as the local database.
+Built with Python and SQL, using DuckDB as the local database and Prefect for workflow orchestration.
 
 ## Overview
 
@@ -17,7 +17,7 @@ Three stages:
 2. **Ingestion** — reads the CSV, validates each row (email format, required dates, missing address), and loads valid rows into `patient`.
 3. **Transformation** — derives `fhir_patient` (current state) and `fhir_patient_history` (full SCD2 history) from patient.
 
-A YAML-driven data quality runner (`init_data_tests.py`) validates the loaded data against a declarative spec (`docs/assets.yaml`), and is fully integrated into the pytest suite.
+A fourth stage — **Data quality** — runs automatically after transformation: a YAML-driven runner (`init_data_tests.py`) validates the loaded data against a declarative spec (`docs/assets.yaml`), and is fully integrated into both Prefect and the pytest suite.
 
 The pipeline follows a two-layer architecture: raw and mart.
 The raw layer (patient) holds data as ingested from the CSV, with only structural validation applied (email format, required fields).
@@ -52,20 +52,42 @@ The `.env` file defines paths for the database and the CSV. Default values work 
 
 ## Running the pipeline
 
-End-to-end with one command:
+### With Prefect (recommended)
+
+End-to-end with task-level logging and observability:
 
 ```bash
-python src/run_pipeline.py
+PYTHONPATH=src python src/pipeline_flow.py
 ```
 
-This runs schema setup, ingestion, and transformation in sequence.
+Prefect starts a temporary local server automatically and runs all four stages (schema setup → ingestion → transformation → data quality). Each stage is a separate task with its own log stream.
 
-To run stages individually:
+To open the Prefect UI and keep a persistent run history, start the server in a separate terminal first:
 
 ```bash
-python src/setup_db.py     # create tables
-python src/ingest.py       # load CSV into patient
-python src/transform.py    # transform patient -> fhir_patient
+# Terminal 1 — start the Prefect server
+prefect server start
+
+# Terminal 2 — run the pipeline (connects to the running server)
+PYTHONPATH=src python src/pipeline_flow.py
+```
+
+Then open [http://localhost:4200](http://localhost:4200) to see flow runs, task states, logs, and timing.
+
+### Without Prefect (legacy)
+
+```bash
+PYTHONPATH=src python src/run_pipeline.py
+```
+
+This delegates directly to `pipeline_flow.py` and produces the same result.
+
+To run stages individually (plain Python, no orchestration):
+
+```bash
+PYTHONPATH=src python src/setup_db.py     # create tables
+PYTHONPATH=src python src/ingest.py       # load CSV into patient
+PYTHONPATH=src python src/transform.py    # transform patient -> fhir_patient
 ```
 
 To run all tests (schema, connectivity, and data quality):
@@ -100,14 +122,48 @@ patient-fhir-pipeline/
 │   ├── ingest.py                     # CSV ingestion
 │   ├── transform.py                  # Runs SQL transformation
 │   ├── init_data_tests.py            # YAML-driven data quality runner
-│   └── run_pipeline.py               # Orchestrates all stages
+│   ├── pipeline_flow.py              # Prefect flow — main entry point
+│   └── run_pipeline.py               # Legacy shim → delegates to pipeline_flow.py
 ├── tests/
 │   ├── test_db.py                    # Environment and DuckDB connectivity tests
 │   ├── check_schema_test.py          # Table and column schema tests
 │   └── test_data_quality.py          # YAML-driven data quality tests (assets.yaml)
 ├── .env.example                      # Template for environment variables
+├── prefect.yaml                      # Prefect deployment configuration
 ├── pyproject.toml                    # pytest configuration
 └── requirements.txt
+```
+
+### Orchestration (Prefect)
+
+The pipeline is orchestrated with [Prefect 3](https://docs.prefect.io/v3/). The entry point is [src/pipeline_flow.py](src/pipeline_flow.py), which defines:
+
+| Prefect task | Maps to | Retries |
+|---|---|---|
+| `Schema Setup` | `setup_db.main()` | 1 (5 s delay) |
+| `Ingest Patients` | `ingest.main()` | 2 (10 s delay) |
+| `Transform to FHIR` | `transform.main()` | — |
+| `Data Quality Tests` | `init_data_tests.run_all_tests()` | — |
+
+Tasks run sequentially (each stage depends on the previous). If a task fails it is retried automatically; if it exhausts retries, the flow is marked as `Failed` and downstream tasks do not run.
+
+**Logging** — each module exposes a `_get_logger()` helper that returns `get_run_logger()` from Prefect when called inside a task, or the standard Python logger when called from pytest or standalone scripts. This keeps modules framework-agnostic while routing all logs through Prefect's UI when the flow is running.
+
+**Deployment** — `prefect.yaml` declares two deployments:
+
+- `dev` — run on demand, no schedule
+- `daily` — cron `0 6 * * *` (Europe/Lisbon), disabled by default
+
+To register deployments with the server:
+
+```bash
+prefect deploy
+```
+
+To trigger a run from the CLI:
+
+```bash
+prefect deployment run 'Patient FHIR Pipeline/dev'
 ```
 
 ### Pipeline control
@@ -285,6 +341,6 @@ python -m pytest -v tests/test_data_quality.py
 The suite exits with code `1` if any assertion fails, making it suitable for CI integration.
 
 ## Future improvements
-- Add orchestration with Prefect to schedule and monitor pipeline runs, with task-level retries and observability via the Prefect UI.
 - Replace DuckDB with Postgres in production; the transformation SQL is portable with minor syntax adjustments.
-- Implement dbt.
+- Implement dbt for the transformation layer.
+- Enable the `daily` Prefect deployment and connect to Prefect Cloud for centralised run history across environments.

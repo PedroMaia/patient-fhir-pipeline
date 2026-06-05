@@ -6,16 +6,21 @@ from typing import Any, Callable
 
 import yaml
 
-from config import PROJECT_ROOT, LOG_LEVEL
+from config import PROJECT_ROOT
 from db import get_connection
-
-logging.basicConfig(level=LOG_LEVEL, format="%(message)s")
-log = logging.getLogger(__name__)
 
 YAML_PATH = PROJECT_ROOT / "docs" / "assets.yaml"
 
 # Simplified regex for email validation (same as ingestion)
 EMAIL_REGEX = r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"
+
+
+def _get_logger():
+    try:
+        from prefect import get_run_logger
+        return get_run_logger()
+    except Exception:
+        return logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -83,8 +88,8 @@ def parse_test(test_def: Any) -> tuple[str, Any]:
     """
     Normalizes a test definition into (test_name, params).
     Supports:
-      - 'not_null'                          -> ('not_null', None)
-      - {'accepted_values': [...]}          -> ('accepted_values', [...])
+      - 'not_null'                 -> ('not_null', None)
+      - {'accepted_values': [...]} -> ('accepted_values', [...])
     """
     if isinstance(test_def, str):
         return test_def, None
@@ -95,6 +100,7 @@ def parse_test(test_def: Any) -> tuple[str, Any]:
 
 
 def run_test(con, asset: str, column: str, test_def: Any) -> TestResult:
+    log = _get_logger()
     test_name, params = parse_test(test_def)
 
     builder = TEST_BUILDERS.get(test_name)
@@ -117,6 +123,7 @@ def run_test(con, asset: str, column: str, test_def: Any) -> TestResult:
 
 
 def run_all_tests() -> list[TestResult]:
+    log = _get_logger()
     log.info(f"Loading {YAML_PATH.relative_to(PROJECT_ROOT)}")
     config = yaml.safe_load(YAML_PATH.read_text(encoding="utf-8"))
 
@@ -125,7 +132,7 @@ def run_all_tests() -> list[TestResult]:
     with get_connection() as con:
         for asset in config.get("assets", []):
             asset_name = asset["name"]
-            log.info(f"\nRunning tests for asset: {asset_name}")
+            log.info(f"Running tests for asset: {asset_name}")
 
             for column in asset.get("columns", []):
                 col_name = column["name"]
@@ -145,29 +152,30 @@ def run_all_tests() -> list[TestResult]:
 
 
 def print_summary(results: list[TestResult]) -> int:
+    log = _get_logger()
     passed = sum(1 for r in results if r.passed)
     failed = len(results) - passed
 
-    log.info("\n" + "=" * 60)
+    log.info("=" * 60)
     log.info(f"Summary: {passed} passed, {failed} failed")
     log.info("=" * 60)
 
     if failed > 0:
-        log.info("\nFailed tests detail:")
+        log.info("Failed tests detail:")
         for r in results:
             if not r.passed:
-                log.info(f"\n  {r.asset}.{r.column} | {r.test_name}")
+                log.info(f"  {r.asset}.{r.column} | {r.test_name}")
                 log.info(f"  Violations: {r.violations}")
                 log.info(f"  Query: {r.example_query}")
 
     return 0 if failed == 0 else 1
 
 
-def main() -> None:
+def main() -> int:
     results = run_all_tests()
-    exit_code = print_summary(results)
-    sys.exit(exit_code)
+    return print_summary(results)
 
 
 if __name__ == "__main__":
-    main()
+    logging.basicConfig(level="INFO", format="%(message)s")
+    sys.exit(main())

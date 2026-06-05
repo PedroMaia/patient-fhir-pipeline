@@ -1,0 +1,29 @@
+name: patient-fhir-pipeline
+prefect-version: "3.0.0"
+
+build: null
+push: null
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /Users/pedromaia/Dev/patient-fhir-pipeline
+
+deployments:
+  - name: dev
+    description: Patient FHIR pipeline — desenvolvimento local
+    entrypoint: src/pipeline_flow.py:patient_fhir_pipeline
+    parameters: {}
+    work_pool:
+      name: default-agent-pool
+    schedules: []
+
+  - name: daily
+    description: Patient FHIR pipeline — execução diária automática
+    entrypoint: src/pipeline_flow.py:patient_fhir_pipeline
+    parameters: {}
+    work_pool:
+      name: default-agent-pool
+    schedules:
+      - cron: "0 6 * * *"
+        timezone: "Europe/Lisbon"
+        active: false
